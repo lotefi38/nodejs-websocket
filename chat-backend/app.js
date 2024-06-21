@@ -14,6 +14,7 @@ const io = socket(server, {
 
 let socketsConnected = new Set();
 let users = {};
+let messages = [];
 
 io.on('connection', (socket) => {
   console.log(`New user connected : ${socket.id}`);
@@ -22,10 +23,12 @@ io.on('connection', (socket) => {
   io.emit('userCount', socketsConnected.size);
 
   socket.on('message', (message) => {
+    messages.push(message);
     io.emit('message', message);
   });
 
   socket.on('privateMessage', (message) => {
+    messages.push(message);
     const recipientSocket = Object.keys(users).find(key => key === message.receiverId);
     if (recipientSocket) {
       io.to(recipientSocket).emit('privateMessage', message);
@@ -41,18 +44,27 @@ io.on('connection', (socket) => {
   });
 
   socket.on('setUsername', (username) => {
-    users[socket.id] = username;
+    users[socket.id] = { name: username, online: true };
     io.emit('updateUserList', users);
   });
 
   socket.on('disconnect', () => {
     console.log(`User disconnected : ${socket.id}`);
     socketsConnected.delete(socket.id);
-    delete users[socket.id];
+    if (users[socket.id]) {
+      users[socket.id].online = false;
+    }
     io.emit('updateUserList', users);
     io.emit('userCount', socketsConnected.size);
   });
 
+  socket.on('messageSeen', (messageId) => {
+    const message = messages.find(msg => msg.id === messageId);
+    if (message) {
+      message.seen = true;
+      io.emit('messageSeen', { messageId, receiverId: message.receiverId });
+    }
+  });
 });
 
 app.get('/', (req, res) => {

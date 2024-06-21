@@ -42,6 +42,16 @@ function App() {
       setFeedback('');
     });
 
+    socket.on('messageSeen', ({ messageId, receiverId }) => {
+      if (receiverId === socket.id) {
+        setMessages((prevMessages) =>
+          prevMessages.map((msg) =>
+            msg.id === messageId ? { ...msg, seen: true } : msg
+          )
+        );
+      }
+    });
+
     return () => {
       socket.off('message');
       socket.off('privateMessage');
@@ -49,6 +59,7 @@ function App() {
       socket.off('setUsername');
       socket.off('typing');
       socket.off('stopTyping');
+      socket.off('messageSeen');
     };
   }, []);
 
@@ -65,17 +76,15 @@ function App() {
   const handleMessageSend = (e) => {
     e.preventDefault();
     const newMessage = {
+      id: Math.random().toString(36).substr(2, 9), // Generate a unique ID for the message
       text: message,
       author: name,
       date: new Date().toLocaleString(),
       senderId: socket.id,
+      receiverId: selectedUser,
+      seen: false,
     };
-    if (selectedUser) {
-      newMessage.receiverId = selectedUser;
-      socket.emit('privateMessage', newMessage);
-    } else {
-      socket.emit('message', newMessage);
-    }
+    socket.emit(selectedUser ? 'privateMessage' : 'message', newMessage);
     setMessage('');
     socket.emit('stopTyping');
   };
@@ -83,6 +92,16 @@ function App() {
   const selectUser = (userId) => {
     setSelectedUser(userId);
   };
+
+  useEffect(() => {
+    if (selectedUser) {
+      messages.forEach((msg) => {
+        if (msg.senderId === selectedUser && !msg.seen) {
+          socket.emit('messageSeen', msg.id);
+        }
+      });
+    }
+  }, [selectedUser, messages]);
 
   return (
     <>
@@ -95,7 +114,7 @@ function App() {
               <li onClick={() => selectUser(null)} className={selectedUser === null ? 'selected' : ''}>All</li>
               {Object.keys(users).map((user, index) => (
                 <li key={index} onClick={() => selectUser(user)} className={selectedUser === user ? 'selected' : ''}>
-                  {users[user]}
+                  {users[user].name} {users[user].online ? '(en ligne)' : '(hors ligne)'}
                 </li>
               ))}
             </ul>
@@ -115,10 +134,10 @@ function App() {
               </span>
             </div>
             <ul className="conversation">
-              {messages.map((msg, index) => (
+              {messages.filter(msg => !selectedUser || msg.receiverId === selectedUser || msg.senderId === selectedUser).map((msg, index) => (
                 <li key={index} className={msg.senderId === socket.id ? 'messageRight' : 'messageLeft'}>
                   <p className="message">{msg.text}</p>
-                  <span>{msg.author} - {msg.date}</span>
+                  <span>{msg.author} - {msg.date} {msg.seen && ' (vu)'}</span>
                 </li>
               ))}
               {feedback && (
