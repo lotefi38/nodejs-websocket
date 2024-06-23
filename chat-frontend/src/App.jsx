@@ -12,17 +12,19 @@ function App() {
   const [feedback, setFeedback] = useState('');
   const [messages, setMessages] = useState([]);
   const [userCount, setUserCount] = useState(0);
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState([]); 
   const [selectedUser, setSelectedUser] = useState(null);
 
   useEffect(() => {
     socket.emit('setUsername', name);
 
     socket.on('message', (message) => {
+      console.log('Message received:', message);  // Ajoutez ceci
       setMessages((prevMessages) => [...prevMessages, message]);
     });
 
     socket.on('privateMessage', (message) => {
+      console.log('Private message received:', message);  // Ajoutez ceci
       setMessages((prevMessages) => [...prevMessages, message]);
     });
 
@@ -31,7 +33,7 @@ function App() {
     });
 
     socket.on('updateUserList', (usersList) => {
-      setUsers(usersList);
+      setUsers(usersList); 
     });
 
     socket.on('typing', (user) => {
@@ -43,8 +45,8 @@ function App() {
     });
 
     socket.on('messageSeen', ({ messageId }) => {
-      setMessages((prevMessages) =>
-        prevMessages.map((msg) =>
+      setMessages(prevMessages =>
+        prevMessages.map(msg =>
           msg.id === messageId ? { ...msg, seen: true } : msg
         )
       );
@@ -91,10 +93,9 @@ function App() {
 
   const selectUser = (userId) => {
     setSelectedUser(userId);
-  };
-
-  const markMessageAsSeen = (messageId) => {
-    socket.emit('messageSeen', messageId);
+    const messageIds = messages.filter(msg => msg.receiverId === userId || msg.senderId === userId).map(msg => msg.id);
+    console.log('Selecting user:', userId);  // Ajoutez ceci
+    socket.emit('accessConversation', messageIds);
   };
 
   return (
@@ -108,7 +109,7 @@ function App() {
               <li onClick={() => selectUser(null)} className={selectedUser === null ? 'selected' : ''}>All</li>
               {Object.keys(users).map((user, index) => (
                 <li key={index} onClick={() => selectUser(user)} className={selectedUser === user ? 'selected' : ''}>
-                  {users[user].name} {users[user].online ? '(en ligne)' : ''}
+                  {users[user].name} {users[user].online ? '(En ligne)' : '(Hors ligne)'}
                 </li>
               ))}
             </ul>
@@ -131,11 +132,7 @@ function App() {
               {messages.map((msg, index) => (
                 <li key={index} className={msg.senderId === socket.id ? 'messageRight' : 'messageLeft'}>
                   <p className="message">{msg.text}</p>
-                  <span>{msg.author} - {msg.date}</span>
-                  {msg.receiverId === socket.id && !msg.seen && (
-                    <button onClick={() => markMessageAsSeen(msg.id)}>markMessageAsSeen</button>
-                  )}
-                  {msg.seen && <span>Vu</span>}
+                  <span>{msg.author} - {msg.date} {msg.seen ? ' (Vu)' : ''}</span>
                 </li>
               ))}
               {feedback && (

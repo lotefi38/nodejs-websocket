@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 const { User, Message } = require('./models');
 
 app.use(cors());
-app.use(express.json()); // Pour traiter les données JSON
+app.use(express.json());
 
 const server = http.createServer(app);
 const io = socket(server, {
@@ -25,6 +25,7 @@ app.post('/register', async (req, res) => {
     const newUser = await User.create({ username });
     res.status(201).json(newUser);
   } catch (error) {
+    console.error('Erreur lors de l\'enregistrement:', error.message); // Ajoutez ceci
     res.status(400).json({ error: error.message });
   }
 });
@@ -40,6 +41,7 @@ app.post('/login', async (req, res) => {
     const token = jwt.sign({ id: user.id, username: user.username }, 'secretKey', { expiresIn: '1h' });
     res.json({ token });
   } catch (error) {
+    console.error('Erreur lors de la connexion:', error.message); // Ajoutez ceci
     res.status(400).json({ error: error.message });
   }
 });
@@ -51,16 +53,26 @@ io.on('connection', (socket) => {
   io.emit('userCount', socketsConnected.size);
 
   socket.on('message', async (message) => {
-    const newMessage = await Message.create(message);
-    io.emit('message', newMessage);
+    try {
+      const newMessage = await Message.create(message);
+      console.log('Message reçu:', message);  // Ajoutez ceci
+      io.emit('message', newMessage);
+    } catch (error) {
+      console.error('Erreur lors de la création du message:', error.message);  // Ajoutez ceci
+    }
   });
 
   socket.on('privateMessage', async (message) => {
-    const recipientSocket = Object.keys(users).find(key => key === message.receiverId);
-    if (recipientSocket) {
-      const newMessage = await Message.create(message);
-      io.to(recipientSocket).emit('privateMessage', newMessage);
-      io.to(socket.id).emit('privateMessage', newMessage); // Ajouter pour que l'expéditeur voit son propre message
+    try {
+      const recipientSocket = Object.keys(users).find(key => key === message.receiverId);
+      if (recipientSocket) {
+        const newMessage = await Message.create(message);
+        console.log('Message privé reçu:', message);  // Ajoutez ceci
+        io.to(recipientSocket).emit('privateMessage', newMessage);
+        io.to(socket.id).emit('privateMessage', newMessage);
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi du message privé:', error.message);  // Ajoutez ceci
     }
   });
 
@@ -88,11 +100,30 @@ io.on('connection', (socket) => {
   });
 
   socket.on('messageSeen', async (messageId) => {
-    const message = await Message.findByPk(messageId);
-    if (message) {
-      message.seen = true;
-      await message.save();
-      io.emit('messageSeen', { messageId, receiverId: message.receiverId });
+    try {
+      const message = await Message.findByPk(messageId);
+      if (message) {
+        message.seen = true;
+        await message.save();
+        io.emit('messageSeen', { messageId, receiverId: message.receiverId });
+      }
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du message vu:', error.message);  // Ajoutez ceci
+    }
+  });
+
+  socket.on('accessConversation', async (messageIds) => {
+    try {
+      for (const messageId of messageIds) {
+        const message = await Message.findByPk(messageId);
+        if (message) {
+          message.seen = true;
+          await message.save();
+          io.emit('messageSeen', { messageId, receiverId: message.receiverId });
+        }
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'accès à la conversation:', error.message);  // Ajoutez ceci
     }
   });
 });
